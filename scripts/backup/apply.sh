@@ -38,52 +38,46 @@ backup_dir="./backups"
 abs_backup_dir="$(pwd)/$backup_dir"
 backup_temp_dir="$backup_dir/.tmp"
 
+overwrite_temp_backup_folder()
+{
+  log_info "Overwriting./.backup/!"
+  rm -rf .backup
+  mkdir -p .backup
+  log_info "Overwritten ./.backup/."
+}
+
+unzip_backup()
+{
+  backup_path="$1"
+  log_info "Unzipping the tar to ./.backup/"
+  tar -xf "$backup_path" -C .backup
+  log_info "Unzipped the tar to ./.backup/"
+}
+
+start_database_container()
+{
+  log_info "Starting the database container..."
+  docker compose up -d ac-database
+}
+
+stop_database_container()
+{
+  log_info "Stopping the database container..."
+  docker compose down
+}
+
+
+
 
 # FUNC
 
-# Params:
-#   $1: backup path
-_apply_backup()
+payload()
 {
-  backup_path=$1
   log_info "Applying backup '$backup_path'..."
-  docker run \
-    --rm \
-    --mount source=ac-database,target=/var/lib/mysql \
-    -v "$abs_backup_dir":/backups \
-    ubuntu bash -c "cd /var/lib/mysql && rm -rf * && tar xvf /$backup_path --strip 1" \
-      > /dev/null
-}
-
-ensure_temp_dir_exists()
-{
-  log_info "Ensuring backup temp directory '$backup_temp_dir' exists..."
-  mkdir -p $backup_temp_dir
-}
-
-get_temp_path()
-{
-  abs_path=$1
-  filename=$(basename ${abs_path})
-  echo "$backup_temp_dir/$filename"
-}
-
-# Params:
-#  $1: absolute backup path
-#    (e.g. '/home/example/2024-09-17_12-04-46.tar')
-copy_to_temp_dir()
-{
-  abs_path=$1
-  ensure_temp_dir_exists
-  temp_path=$(get_temp_path $abs_path)
-  log_info "Copying backup '$abs_path' to temp file '$temp_path'..."
-  cp $abs_path $temp_path
-}
-
-delete_temp_dir()
-{
-  log_info "Deleting backup temp directory '$backup_temp_dir'..."
-  rm -rf $backup_temp_dir
+  cat .backup/acore_auth.sql | docker exec -i ac-database /usr/bin/mysql -u root --password=password acore_auth
+  cat .backup/acore_characters.sql | docker exec -i ac-database /usr/bin/mysql -u root --password=password acore_characters
+  cat .backup/acore_world.sql | docker exec -i ac-database /usr/bin/mysql -u root --password=password acore_world
+  log_info "Hopefully applied '$backup_path'."
 }
 
 # Params:
@@ -91,11 +85,19 @@ delete_temp_dir()
 #    (e.g. '2024-09-17_12-04-46.tar', '2024/09/17/2024-09-17_12-04-46.tar', '/user/anUser/backups/backup.tar')
 apply_backup()
 {
-  abs_path=$1
-  copy_to_temp_dir $abs_path
-  temp_path=$(get_temp_path $abs_path)
-  _apply_backup $temp_path
-  delete_temp_dir
+  backup_path=$1
+  log_info "backup_path: $backup_path"
+  overwrite_temp_backup_folder
+  unzip_backup "$backup_path"
+  start_database_container
+  sleep 5 
+  payload
+  stop_database_container
+}
+
+show_help()
+{
+  echo "Usage: $ ./scripts/backup/apply.sh <backup_path>"
 }
 
 # MAIN
@@ -108,7 +110,7 @@ main()
   # Assumes that we are running from the root directory (guaranteed by setup)
   filepath=$1
   apply_backup $filepath
-  restart_ac_if_requested $*
+#  restart_ac_if_requested $*
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
