@@ -32,17 +32,37 @@ get_backup_filename()
   echo "$(date "+%Y-%m-%d_%H-%M-%S").tar"
 }
 
+overwrite_temp_backup_folder()
+{
+  rm -rf .backup
+  mkdir -p .backup
+}
+
+ensure_backups_directory_exists()
+{
+  mkdir -p backups
+}
+
+zip_to_backups_directory()
+{
+  ensure_backups_directory_exists
+  tar -czvf "./backups/$(get_backup_filename)" -C .backup .
+}
+
+
 create_backup()
 {
-  filename=$(get_backup_filename)
-  log_info "Creating backup '$filename'..."
-  # Docker will automatically create our backup directory when it's mounted if it doesn't exist
-  docker run \
-    --rm \
-    --mount source=wowowow_ac-database,target=/var/lib/mysql \
-    -v "$(pwd)/backups":/backups \
-    ubuntu bash -c "cd /var/lib/mysql && tar cvf /backups/$filename ." \
-      > /dev/null
+  log_info "Starting the database container..."
+  docker compose up -d ac-database
+  sleep 5 
+  overwrite_temp_backup_folder
+  log_info "Creating backup..."
+  docker exec ac-database /usr/bin/mysqldump -u root --password=password acore_auth > .backup/acore_auth.sql
+  docker exec ac-database /usr/bin/mysqldump -u root --password=password acore_world > .backup/acore_world.sql
+  docker exec ac-database /usr/bin/mysqldump -u root --password=password acore_characters > .backup/acore_characters.sql
+  zip_to_backups_directory
+  log_info "Stopping the database container..."
+  docker compose down
 }
 
 
