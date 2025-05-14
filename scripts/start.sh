@@ -4,6 +4,8 @@
 # > start.sh
 #     Starts the AzerothCore server.
 #       Internally, wraps `docker compose up` with a backup script.
+#       Any flags passed to this script (notably -d) will be passed to `docker compose up`.
+#         ...meaning that to start the server in detached mode, run `docker compose up -d`.
 #
 
 
@@ -31,7 +33,7 @@ main()
     if backup_cron_job_exists
     then
         log_info "Cron job successfully created!"
-        start_ac
+        start_ac $@
     else
         log_error "Failed to start - backup cron job could not be created."
     fi

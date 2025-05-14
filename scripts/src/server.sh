@@ -16,7 +16,7 @@ source "./scripts/src/log.sh"
 start_ac()
 {
   log_info 'Starting the server...'
-  docker compose up
+  docker compose up $@
 }
 
 stop_ac()
